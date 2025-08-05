@@ -1,17 +1,16 @@
-# auto_token_refresh.py
-
 import webbrowser
 import threading
-import yaml
 from flask import Flask, request
 from kiteconnect import KiteConnect
+import os
+from dotenv import load_dotenv, set_key
 
-# Load config
-with open("config.yaml", "r") as f:
-    config = yaml.safe_load(f)
+# Load env variables
+load_dotenv()
+ENV_PATH = ".env"
 
-api_key = config["api"]["api_key"]
-api_secret = config["api"]["api_secret"]
+api_key = os.getenv("KITE_API_KEY")
+api_secret = os.getenv("KITE_API_SECRET")
 
 kite = KiteConnect(api_key=api_key)
 app = Flask(__name__)
@@ -26,14 +25,11 @@ def login():
         data = kite.generate_session(request_token, api_secret=api_secret)
         access_token = data["access_token"]
 
-        # Save back to config
-        config["api"]["access_token"] = access_token
-        with open("config.yaml", "w") as f:
-            yaml.dump(config, f)
+        # Save the new token to .env
+        set_key(ENV_PATH, "KITE_ACCESS_TOKEN", access_token)
 
-        print(f"✅ Access token saved: {access_token}")
-        return "✅ Token received and saved. You can close this tab."
-
+        print(f"✅ Access token saved to .env: {access_token}")
+        return "✅ Token received and saved to .env. You can close this tab."
     except Exception as e:
         return f"❌ Error: {str(e)}"
 
