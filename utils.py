@@ -150,13 +150,13 @@ def get_instrument_token(kite, symbol, exchange="NSE"):
     return None
 
 # --- MODIFIED: Renamed get_daily_data and added 'interval' parameter ---
-def get_historical_data(kite, symbol, days, interval):
+def get_historical_data(kite, symbol, days, interval, exchange="NSE"):
     """
     Fetches historical data for a given symbol, number of days, and interval.
     """
     to_date = datetime.datetime.now()
     from_date = to_date - datetime.timedelta(days=days)
-    token = get_instrument_token(kite, symbol)
+    token = get_instrument_token(kite, symbol, exchange)
     if token is None:
         raise ValueError(f"❌ Symbol '{symbol}' not found in instrument list.")
     
@@ -164,16 +164,7 @@ def get_historical_data(kite, symbol, days, interval):
     data = kite.historical_data(token, from_date, to_date, interval=interval)
     return pd.DataFrame(data)
 
-# # --- get_all_nse_symbols remains the same ---
-# def get_all_nse_symbols(kite):
-#     instruments = kite.instruments("NSE")
-#     df = pd.DataFrame(instruments)
-#     eq_df = df[(df['instrument_type'] == 'EQ') & (df['segment'] == 'NSE') & (df['name'].notna()) & (df['name'].str.strip() != "") & (df['name'].str.len() > 2)]
-#     # eq_df = eq_df[eq_df['tradingsymbol'].str.match(r'^[A-Z]{2,}$')]
-#     symbol_list = sorted([f"{row['tradingsymbol']} ({row['name']})" for _, row in eq_df.iterrows()])
-#     return symbol_list
-
-# In utils.py
+# # --- get_all_nse_symbols ---
 
 def get_all_nse_symbols(kite):
     """
@@ -196,7 +187,77 @@ def get_all_nse_symbols(kite):
 
     # 3. Create a formatted list and sort it alphabetically
     symbol_list = sorted([
-        f"{row['tradingsymbol']} ({row['name']})" for _, row in eq_df.iterrows()
+        f"{row['name']} - (NSE) - ({row['tradingsymbol']})" for _, row in eq_df.iterrows()
     ])
+    
+    return symbol_list
+
+
+# # --- get all NSE and BSE symbols ---
+def get_all_stock_symbols(kite, exchanges=['NSE', 'BSE']):
+    """
+    Fetches and combines a list of all equity symbols from the specified exchanges.
+
+    Args:
+        kite: An initialized KiteConnect object.
+        exchanges: A list of exchanges to fetch (e.g., ['NSE', 'BSE']).
+
+    Returns:
+        A sorted list of formatted strings for each stock symbol.
+    """
+    # Create a list to hold the instrument data from each exchange
+    all_instruments_df = []
+    
+    # Loop through each specified exchange
+    for exchange in exchanges:
+        try:
+            instruments = kite.instruments(exchange)
+            all_instruments_df.append(pd.DataFrame(instruments))
+        except Exception as e:
+            print(f"Could not fetch instruments for {exchange}. Error: {e}")
+
+    # Combine all dataframes into one
+    if not all_instruments_df:
+        return [] # Return empty list if no instruments were fetched
+        
+    df = pd.concat(all_instruments_df)
+
+    # We use regex word boundaries (\b) to avoid matching parts of words (e.g., 'fund' in 'fundamental')
+    exclude_keywords = [
+        r'\bETF\b', r'\bLIQUID\b', r'\bBEES\b', r'\bFUND\b', 
+        r'\bDEBT\b', r'\bNIFTY\b', r'\bSENSEX\b'
+    ]
+    exclude_pattern = '|'.join(exclude_keywords)
+
+
+    # Filter for active equity stocks from all specified exchanges
+    eq_df = df[
+        (df['instrument_type'] == 'EQ') &
+        (df['name'].notna()) &
+        (df['name'].str.strip() != "") &
+        (df['name'].str.len() > 2) &
+        # Match common stock symbol patterns
+        (df['tradingsymbol'].str.match(r'^[A-Z0-9&.-]{2,}$')) &
+        # Exclude debt instruments or other non-standard symbols
+        (~df['tradingsymbol'].str.contains('DEBT|ETF')) &
+
+        # Condition 3: The name should not contain any of the excluded keywords (case-insensitive)
+        (~df['name'].str.contains(exclude_pattern, case=True, na=False, regex=True)) &
+        
+        # Condition 4: The tradingsymbol should not contain any of the excluded keywords
+        (~df['tradingsymbol'].str.contains(exclude_pattern, case=True, na=False, regex=True))
+   
+    ]
+
+    eq_df = eq_df[eq_df['tradingsymbol'].str.match(r'^[A-Z]{2,}$')]
+
+    # Sort by tradingsymbol for a clean, alphabetized list
+    eq_df = eq_df.sort_values(by="tradingsymbol")
+
+    # Create "SYMBOL (EXCHANGE) - Name" format for clarity
+    symbol_list = [
+        f"{row['name']} - ({row['exchange']}) - ({row['tradingsymbol']})" 
+        for _, row in eq_df.iterrows()
+    ]
     
     return symbol_list
