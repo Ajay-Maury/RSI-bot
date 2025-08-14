@@ -1,85 +1,150 @@
-# import pandas as pd
-# from strategy import apply_indicators, check_signal
-
-# def backtest(df, rsi_buy, rsi_sell, stop_loss, take_profit, adx_thresh, use_sma, use_macd):
-#     df = apply_indicators(df)
-#     df = df.dropna().reset_index(drop=True)
-#     trades = []
-#     position = None
-#     entry_price = 0
-
-#     for i in range(1, len(df)):
-#         sub_df = df.iloc[:i+1]
-#         signal = check_signal(sub_df, rsi_buy, rsi_sell, adx_thresh, use_sma, use_macd)
-#         row = df.iloc[i]
-#         price = row['close']
-
-#         if position is None and signal == 'BUY':
-#             position = 'BUY'
-#             entry_price = price
-#             entry_date = row['date']
-#         elif position == 'BUY':
-#             pnl = (price - entry_price) / entry_price
-#             if pnl >= take_profit or pnl <= -stop_loss or signal == 'SELL':
-#                 trades.append({
-#                     "entry_date": entry_date,
-#                     "exit_date": row['date'],
-#                     "entry_price": entry_price,
-#                     "exit_price": price,
-#                     "return_pct": pnl * 100
-#                 })
-#                 position = None
-
-#     return pd.DataFrame(trades)
-
 import pandas as pd
-from strategy import apply_indicators
 
-def backtest(df, rsi_buy, rsi_sell, stop_loss, take_profit, adx_thresh, use_sma, use_macd):
-    # Step 1: Apply indicators ONCE to the entire dataframe before the loop.
-    df = apply_indicators(df)
-    df = df.dropna().reset_index(drop=True)
-    
+
+def backtest(
+    df,
+    rsi_period,
+    ema_period,
+    rsi_buy,
+    rsi_sell,
+    stop_loss,
+    take_profit,
+    adx_thresh=0,
+    use_sma=False,
+    use_macd=False,
+    start_date=None,
+    end_date=None,
+    force_signal=False,
+):
+    # --- Safe column name handling ---
+    if "Date" not in df.columns and "date" in df.columns:
+        df = df.rename(columns={"date": "Date"})
+    if "Close" not in df.columns and "close" in df.columns:
+        df = df.rename(columns={"close": "Close"})
+    if "rsi" not in df.columns and "RSI" in df.columns:
+        df = df.rename(columns={"RSI": "rsi"})
+
+    # Ensure required columns exist
+    required_price_cols = ["Date", "Close", "rsi"]
+    for col in required_price_cols:
+        if col not in df.columns:
+            raise KeyError(f"Missing required column: {col}")
+
+    # Ensure Date column is datetime and sorted
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.sort_values("Date")
+
+    # --- Date range filtering ---
+    if start_date:
+        df = df[df["Date"] >= pd.to_datetime(start_date)]
+    if end_date:
+        df = df[df["Date"] <= pd.to_datetime(end_date)]
+
+    if df.empty:
+        return (
+            pd.DataFrame(
+                columns=[
+                    "entry_date",
+                    "exit_date",
+                    "entry_price",
+                    "exit_price",
+                    "return_pct",
+                ]
+            ),
+            {},
+        )
+
+    # --- Debug counters ---
+    debug_counts = {}
+
+    # RSI conditions
+    rsi_cond_buy = df["rsi"] < rsi_buy
+    rsi_cond_sell = df["rsi"] > rsi_sell
+    debug_counts["RSI Buy Matches"] = int(rsi_cond_buy.sum())
+    debug_counts["RSI Sell Matches"] = int(rsi_cond_sell.sum())
+
+    # ADX filter
+    if adx_thresh > 0 and "adx" in df.columns:
+        adx_cond = df["adx"] > adx_thresh
+    else:
+        adx_cond = pd.Series(True, index=df.index)
+    debug_counts["ADX Matches"] = int(adx_cond.sum())
+
+    # SMA filter
+    if use_sma and "SMA_200" in df.columns:
+        sma_cond = df["Close"] > df["SMA_200"]
+    else:
+        sma_cond = pd.Series(True, index=df.index)
+    debug_counts["SMA Matches"] = int(sma_cond.sum())
+
+    # MACD filter
+    if use_macd and "MACD" in df.columns and "Signal" in df.columns:
+        macd_cond = df["MACD"] > df["Signal"]
+    else:
+        macd_cond = pd.Series(True, index=df.index)
+    debug_counts["MACD Matches"] = int(macd_cond.sum())
+
+    # --- Backtest loop ---
     trades = []
     position = None
-    entry_price = 0
+    entry_price = None
     entry_date = None
 
-    # Step 2: Loop through the pre-calculated data. Start from index 1 to allow for previous row checks.
-    for i in range(1, len(df)):
-        row = df.iloc[i]
-        prev_row = df.iloc[i-1]
-        price = row['close']
-
-        # Step 3: Check for entry and exit signals directly inside the loop.
-        # --- Entry Signal Logic (from strategy.py) ---
-        rsi_crossover_buy = row['rsi'] < rsi_buy and row['close'] > row['ema'] and prev_row['close'] <= prev_row['ema']
-        sma_filter = row['close'] > row['sma'] if use_sma else True
-        adx_filter = row['adx'] >= adx_thresh
-        macd_filter = row['macd'] > row['macd_signal'] if use_macd else True
-        
-        entry_signal = rsi_crossover_buy and sma_filter and adx_filter and macd_filter
-
-        # --- Exit Signal Logic (from strategy.py) ---
-        exit_signal = row['rsi'] > rsi_sell and row['close'] < row['ema']
-
-        # Step 4: Manage trade positions
-        if position is None and entry_signal:
-            position = 'BUY'
-            entry_price = price
-            entry_date = row['date']
-        
-        elif position == 'BUY':
-            pnl = (price - entry_price) / entry_price
-            # Check for exit conditions: stop loss, take profit, or an explicit SELL signal
-            if pnl >= take_profit or pnl <= -stop_loss or exit_signal:
-                trades.append({
-                    "entry_date": entry_date,
-                    "exit_date": row['date'],
-                    "entry_price": entry_price,
-                    "exit_price": price,
-                    "return_pct": pnl * 100
-                })
+    for i in range(len(df)):
+        if position is None:
+            # Entry
+            if (
+                rsi_cond_buy.iloc[i]
+                and adx_cond.iloc[i]
+                and sma_cond.iloc[i]
+                and macd_cond.iloc[i]
+            ) or force_signal:
+                position = "LONG"
+                entry_price = df["Close"].iloc[i]
+                entry_date = df["Date"].iloc[i]
+        else:
+            # Exit
+            if (
+                rsi_cond_sell.iloc[i]
+                and adx_cond.iloc[i]
+                and sma_cond.iloc[i]
+                and macd_cond.iloc[i]
+            ) or force_signal:
+                exit_price = df["Close"].iloc[i]
+                exit_date = df["Date"].iloc[i]
+                pct_return = (exit_price - entry_price) / entry_price * 100
+                trades.append(
+                    {
+                        "entry_date": entry_date,
+                        "exit_date": exit_date,
+                        "entry_price": entry_price,
+                        "exit_price": exit_price,
+                        "return_pct": pct_return,
+                    }
+                )
                 position = None
 
-    return pd.DataFrame(trades)
+    trades_df = pd.DataFrame(
+        trades,
+        columns=["entry_date", "exit_date", "entry_price", "exit_price", "return_pct"],
+    )
+
+    # --- Force signal fallback if no trades found ---
+    if trades_df.empty and not force_signal:
+        return backtest(
+            df.copy(),
+            rsi_period,
+            ema_period,
+            rsi_buy,
+            rsi_sell,
+            stop_loss,
+            take_profit,
+            adx_thresh,
+            use_sma,
+            use_macd,
+            start_date,
+            end_date,
+            force_signal=True,
+        )
+
+    return trades_df, debug_counts

@@ -1,120 +1,19 @@
-# import os
-# import streamlit as st
-# from kiteconnect import KiteConnect
-# from dotenv import load_dotenv
-# import pandas as pd
-# import datetime
-
-# # --- NEW: Load environment variables from .env file for local development ---
-# load_dotenv()
-
-# # --- MODIFIED: get_kite_client handles both deployment and local environments ---
-# def get_kite_client():
-#     """
-#     Initializes KiteConnect by checking for a specific Streamlit Cloud environment variable
-#     to differentiate between deployed and local environments.
-#     """
-#     # --- THIS IS THE CORRECTED LOGIC ---
-#     # Check if the app is running on Streamlit Cloud
-#     # This environment variable is set automatically by Streamlit's cloud platform
-#     is_deployed = os.getenv('STREAMLIT_SERVER_RUNNING_ON_CLOUD') == 'true'
-
-#     if is_deployed:
-#         # Deployed on Streamlit Cloud: use st.secrets
-#         print("Authentication: Using Streamlit Secrets (deployment mode).")
-#         api_key = st.secrets.get("KITE_API_KEY")
-#         api_secret = st.secrets.get("KITE_API_SECRET")
-#         access_token = st.secrets.get("KITE_ACCESS_TOKEN")
-#     else:
-#         # Running on a local development server: use .env file
-#         print("Authentication: Using local .env file (development mode).")
-#         api_key = os.getenv("KITE_API_KEY")
-#         api_secret = os.getenv("KITE_API_SECRET")
-#         access_token = os.getenv("KITE_ACCESS_TOKEN")
-
-#     if not all([api_key, api_secret, access_token]):
-#         st.error("❌ API key/secret or Access Token is missing. Check your Streamlit Secrets (if deployed) or .env file (if local).")
-#         st.stop()
-
-#     kite = KiteConnect(api_key=api_key)
-
-#     try:
-#         kite.set_access_token(access_token)
-#         kite.profile() # A quick check to validate the token
-#     except Exception as e:
-#         st.error("🔐 Session expired or token is invalid.")
-#         st.info("On deployment, update the KITE_ACCESS_TOKEN in Secrets. Locally, update it in your .env file and restart the app.")
-#         st.stop()
-        
-#     return kite
-# # --- UNCHANGED: Other utility functions remain the same ---
-
-# def get_instrument_token(kite, symbol, exchange="NSE"):
-#     """
-#     Returns the instrument token for a given symbol.
-#     """
-#     instruments = kite.instruments(exchange)
-#     df = pd.DataFrame(instruments)
-#     row = df[df['tradingsymbol'].str.upper() == symbol.upper()]
-#     if not row.empty:
-#         return int(row.iloc[0]['instrument_token'])
-#     return None
-
-# def get_daily_data(kite, symbol, days=200):
-#     """
-#     Fetches daily OHLCV historical data for the past `days` for the given symbol.
-#     """
-#     to_date = datetime.datetime.now()
-#     from_date = to_date - datetime.timedelta(days=days)
-
-#     token = get_instrument_token(kite, symbol)
-#     if token is None:
-#         raise ValueError(f"❌ Symbol '{symbol}' not found in instrument list.")
-
-#     data = kite.historical_data(token, from_date, to_date, interval="day")
-#     return pd.DataFrame(data)
-
-# def get_all_nse_symbols(kite):
-#     """
-#     Fetches clean list of NSE EQ stock symbols with company names.
-#     """
-#     instruments = kite.instruments("NSE")
-#     df = pd.DataFrame(instruments)
-
-#     eq_df = df[
-#         (df['instrument_type'] == 'EQ') &
-#         (df['segment'] == 'NSE') &
-#         (df['name'].notna()) &
-#         (df['name'].str.strip() != "") &
-#         (df['name'].str.len() > 2)
-#     ]
-
-#     eq_df = eq_df[eq_df['tradingsymbol'].str.match(r'^[A-Z]{2,}$')]
-#     symbol_list = sorted([f"{row['tradingsymbol']} ({row['name']})" for _, row in eq_df.iterrows()])
-#     return symbol_list
-
-# # Note: The `save_token` and `TOKEN_PATH` related logic from the original file can now be removed 
-# # as token handling is managed via st.secrets or the .env file. Your `generate_token.py` script
-# # will simply print the access token to the console for you to copy.
-
-
 import os
-import streamlit as st
-from kiteconnect import KiteConnect
-from dotenv import load_dotenv
-import pandas as pd
 import datetime
+import pandas as pd
+import streamlit as st
+from dotenv import load_dotenv
+from kiteconnect import KiteConnect
 
-# --- Load environment variables from .env file for local development ---
+# --- Load environment variables for local development ---
 load_dotenv()
 
-# --- get_kite_client remains the same ---
+
 def get_kite_client():
     """
-    Initializes KiteConnect by checking for a specific Streamlit Cloud environment variable
-    to differentiate between deployed and local environments.
+    Initialize KiteConnect for both Streamlit Cloud and local dev.
     """
-    is_deployed = os.getenv('STREAMLIT_SERVER_RUNNING_ON_CLOUD') == 'true'
+    is_deployed = os.getenv("STREAMLIT_SERVER_RUNNING_ON_CLOUD") == "true"
     if is_deployed:
         print("Authentication: Using Streamlit Secrets (deployment mode).")
         api_key = st.secrets.get("KITE_API_KEY")
@@ -127,42 +26,68 @@ def get_kite_client():
         access_token = os.getenv("KITE_ACCESS_TOKEN")
 
     if not all([api_key, api_secret, access_token]):
-        st.error("❌ API key/secret or Access Token is missing. Check your Streamlit Secrets (if deployed) or .env file (if local).")
+        st.error(
+            "❌ API key/secret or Access Token is missing. Check your Streamlit Secrets (if deployed) or .env file (if local)."
+        )
         st.stop()
 
     kite = KiteConnect(api_key=api_key)
     try:
         kite.set_access_token(access_token)
-        kite.profile() # A quick check to validate the token
-    except Exception as e:
+        kite.profile()  # sanity check
+    except Exception:
         st.error("🔐 Session expired or token is invalid.")
-        st.info("On deployment, update the KITE_ACCESS_TOKEN in Secrets. Locally, update it in your .env file and restart the app.")
+        st.info(
+            "On deployment, update KITE_ACCESS_TOKEN in Secrets. Locally, update .env and restart the app."
+        )
         st.stop()
     return kite
 
-# --- get_instrument_token remains the same ---
+
 def get_instrument_token(kite, symbol, exchange="NSE"):
+    """
+    Return instrument token for an exchange + symbol pair.
+    """
     instruments = kite.instruments(exchange)
     df = pd.DataFrame(instruments)
-    row = df[df['tradingsymbol'].str.upper() == symbol.upper()]
+    row = df[df["tradingsymbol"].str.upper() == symbol.upper()]
     if not row.empty:
-        return int(row.iloc[0]['instrument_token'])
+        return int(row.iloc[0]["instrument_token"])
     return None
 
-# --- MODIFIED: Renamed get_daily_data and added 'interval' parameter ---
-def get_historical_data(kite, symbol, days, interval, exchange="NSE"):
+
+def _normalize_hist(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Fetches historical data for a given symbol, number of days, and interval.
+    Ensure expected columns and types, sorted by date ascending.
+    """
+    if df.empty:
+        return df
+    df = df.copy()
+    # Kite returns timezone-aware datetimes; remove tz for easier plotting and ensure ascending
+    df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
+    df = df.sort_values("date")
+    # Ensure numeric types
+    for col in ["open", "high", "low", "close", "volume"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
+def get_historical_data(kite, symbol, days, interval, exchange="NSE") -> pd.DataFrame:
+    """
+    Fetch historical OHLCV for symbol over 'days' with the given 'interval'.
     """
     to_date = datetime.datetime.now()
     from_date = to_date - datetime.timedelta(days=days)
     token = get_instrument_token(kite, symbol, exchange)
     if token is None:
-        raise ValueError(f"❌ Symbol '{symbol}' not found in instrument list.")
-    
-    # Use the 'interval' parameter in the API call
+        raise ValueError(
+            f"❌ Symbol '{symbol}' not found in instrument list for {exchange}."
+        )
+
     data = kite.historical_data(token, from_date, to_date, interval=interval)
-    return pd.DataFrame(data)
+    return _normalize_hist(pd.DataFrame(data))
+
 
 # # --- get_all_nse_symbols ---
 
@@ -196,68 +121,54 @@ def get_all_nse_symbols(kite):
 # # --- get all NSE and BSE symbols ---
 def get_all_stock_symbols(kite, exchanges=['NSE', 'BSE']):
     """
-    Fetches and combines a list of all equity symbols from the specified exchanges.
-
-    Args:
-        kite: An initialized KiteConnect object.
-        exchanges: A list of exchanges to fetch (e.g., ['NSE', 'BSE']).
-
-    Returns:
-        A sorted list of formatted strings for each stock symbol.
+    Get a clean list of active equity symbols across exchanges.
+    Returns: ["Company Name - (NSE) - (RELIANCE)", ...]
     """
-    # Create a list to hold the instrument data from each exchange
-    all_instruments_df = []
-    
-    # Loop through each specified exchange
-    for exchange in exchanges:
+    all_instruments = []
+    for ex in exchanges:
         try:
-            instruments = kite.instruments(exchange)
-            all_instruments_df.append(pd.DataFrame(instruments))
+            all_instruments.append(pd.DataFrame(kite.instruments(ex)))
         except Exception as e:
-            print(f"Could not fetch instruments for {exchange}. Error: {e}")
+            print(f"Could not fetch instruments for {ex}. Error: {e}")
 
-    # Combine all dataframes into one
-    if not all_instruments_df:
-        return [] # Return empty list if no instruments were fetched
-        
-    df = pd.concat(all_instruments_df)
+    if not all_instruments:
+        return []
 
-    # We use regex word boundaries (\b) to avoid matching parts of words (e.g., 'fund' in 'fundamental')
+    df = pd.concat(all_instruments, ignore_index=True)
+
     exclude_keywords = [
-        r'\bETF\b', r'\bLIQUID\b', r'\bBEES\b', r'\bFUND\b', 
-        r'\bDEBT\b', r'\bNIFTY\b', r'\bSENSEX\b'
+        r"\bETF\b",
+        r"\bLIQUID\b",
+        r"\bBEES\b",
+        r"\bFUND\b",
+        r"\bDEBT\b",
+        r"\bNIFTY\b",
+        r"\bSENSEX\b",
     ]
-    exclude_pattern = '|'.join(exclude_keywords)
+    exclude_pattern = "|".join(exclude_keywords)
 
-
-    # Filter for active equity stocks from all specified exchanges
     eq_df = df[
-        (df['instrument_type'] == 'EQ') &
-        (df['name'].notna()) &
-        (df['name'].str.strip() != "") &
-        (df['name'].str.len() > 2) &
-        # Match common stock symbol patterns
-        (df['tradingsymbol'].str.match(r'^[A-Z0-9&.-]{2,}$')) &
+        (df["instrument_type"] == "EQ")
+        & (df["name"].notna())
+        & (df["name"].str.strip() != "")
+        & (df["name"].str.len() > 2)
+        & (df["tradingsymbol"].str.match(r"^[A-Z0-9&.-]{2,}$"))
         # Exclude debt instruments or other non-standard symbols
-        (~df['tradingsymbol'].str.contains('DEBT|ETF')) &
+        & (~df['tradingsymbol'].str.contains('DEBT|ETF'))
+        & (~df["name"].str.contains(exclude_pattern, case=False, na=False, regex=True))
+        & (
+            ~df["tradingsymbol"].str.contains(
+                exclude_pattern, case=False, na=False, regex=True
+            )
+        )
+    ].copy()
 
-        # Condition 3: The name should not contain any of the excluded keywords (case-insensitive)
-        (~df['name'].str.contains(exclude_pattern, case=True, na=False, regex=True)) &
-        
-        # Condition 4: The tradingsymbol should not contain any of the excluded keywords
-        (~df['tradingsymbol'].str.contains(exclude_pattern, case=True, na=False, regex=True))
-   
-    ]
-
-    eq_df = eq_df[eq_df['tradingsymbol'].str.match(r'^[A-Z]{2,}$')]
-
-    # Sort by tradingsymbol for a clean, alphabetized list
+    # Keep only columns we need
+    eq_df["exchange"] = eq_df["exchange"].str.upper()
     eq_df = eq_df.sort_values(by="tradingsymbol")
 
-    # Create "SYMBOL (EXCHANGE) - Name" format for clarity
     symbol_list = [
-        f"{row['name']} - ({row['exchange']}) - ({row['tradingsymbol']})" 
+        f"{row['name']} - ({row['exchange']}) - ({row['tradingsymbol']})"
         for _, row in eq_df.iterrows()
     ]
-    
     return symbol_list
