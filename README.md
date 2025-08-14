@@ -2,7 +2,13 @@
 
 A comprehensive, Python-based swing trading bot that uses a combination of RSI, EMA, SMA, ADX, and MACD indicators. The tool features a powerful backtesting engine and an interactive Streamlit dashboard for real-time analysis and strategy tuning.
 
-## 🚀 Key Features
+## 🚀 Live Demo
+
+You can try out the live, deployed application here:
+**[https://rsi-bot.streamlit.app/](https://rsi-bot.streamlit.app/)**
+
+
+## 🔑 Key Features
 
   - **Multi-Exchange Support**: Seamlessly search for and analyze stocks from both the National Stock Exchange (NSE) and Bombay Stock Exchange (BSE).
   - **Flexible Strategy Logic**: The core strategy is built on RSI levels and EMA crossovers. You can enhance its precision by enabling optional filters for:
