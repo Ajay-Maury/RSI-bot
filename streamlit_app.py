@@ -1,8 +1,10 @@
+import os
 import re
 import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime, timedelta
+from kiteconnect import KiteConnect
 
 from utils import (
     get_kite_client,
@@ -12,6 +14,59 @@ from utils import (
 )
 from strategy import apply_indicators, check_signal
 from backtest import backtest
+
+
+# ======================================================================================
+# --- NEW: TOKEN GENERATION LOGIC ---
+# This block checks if a 'request_token' is in the URL, and if so, handles the
+# access token generation process. This must be at the very top of the script.
+# ======================================================================================
+query_params = st.query_params
+if "request_token" in query_params:
+    request_token = query_params["request_token"]
+
+    st.set_page_config(page_title="Generating Token...", layout="centered")
+    st.title("🔑 Kite Access Token Generator")
+    st.success(f"✅ Request Token Received: `{request_token}`")
+
+    try:
+        # Fetch API key and secret from secrets/env
+        is_deployed = os.getenv("STREAMLIT_SERVER_RUNNING_ON_CLOUD") == "true"
+        if is_deployed:
+            api_key = st.secrets.get("KITE_API_KEY")
+            api_secret = st.secrets.get("KITE_API_SECRET")
+        else:
+            from dotenv import load_dotenv
+            load_dotenv()
+            api_key = os.getenv("KITE_API_KEY")
+            api_secret = os.getenv("KITE_API_SECRET")
+
+        if not api_key or not api_secret:
+            st.error("KITE_API_KEY or KITE_API_SECRET not found in your configuration.")
+        else:
+            kite = KiteConnect(api_key=api_key)
+            with st.spinner("Generating session... Please wait."):
+                session = kite.generate_session(request_token, api_secret=api_secret)
+                access_token = session["access_token"]
+
+            st.success("🎉 **SUCCESS! Your Access Token has been generated.** 🎉")
+            st.code(access_token)
+            st.markdown("""
+            **👇 NEXT ACTION 👇**
+            1. Copy this new token.
+            2. Update the `KITE_ACCESS_TOKEN` value in your Streamlit Secrets.
+            3. **Remove the `?request_token=...` from the URL in your browser to go back to the main app.**
+            """)
+    except Exception as e:
+        st.error(f"❌ An error occurred during session generation: {e}")
+        st.info("Please ensure your API Key and Secret are correct in the app's configuration.")
+
+    st.stop() # Stop the rest of the app from running
+
+
+# ======================================================================================
+# --- Main App Starts Here ---
+# ======================================================================================
 
 # --- 1) Streamlit App Config ---
 st.set_page_config(page_title="RSI Trading Dashboard", layout="wide")
@@ -64,6 +119,21 @@ st.sidebar.header("🔧 Optional Filters")
 adx_thresh = st.sidebar.slider("ADX Minimum Strength", min_value=10, max_value=50, value=20)
 use_sma = st.sidebar.checkbox("Use 200-Day SMA Filter (Price > SMA)", value=True)
 use_macd = st.sidebar.checkbox("Use MACD Filter (MACD > Signal)", value=True)
+
+# --- NEW: Sidebar section for token generation link ---
+st.sidebar.markdown("---")
+st.sidebar.header("🔑 Generate New Access Token")
+st.sidebar.info("If the app shows a session error, click the link below to log in to Kite and generate a new access token.")
+try:
+    is_deployed = os.getenv("STREAMLIT_SERVER_RUNNING_ON_CLOUD") == "true"
+    api_key_for_login = st.secrets.get("KITE_API_KEY") if is_deployed else os.getenv("KITE_API_KEY")
+    if api_key_for_login:
+        kite_login_client = KiteConnect(api_key=api_key_for_login)
+        st.sidebar.link_button("🔗 Log in to Kite to Generate Token", kite_login_client.login_url())
+    else:
+        st.sidebar.warning("KITE_API_KEY not found.")
+except Exception:
+    st.sidebar.error("Could not generate login link.")
 
 # --- 5) Symbol Selection ---
 selected_label = st.selectbox(
