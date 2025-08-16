@@ -52,10 +52,14 @@ if "request_token" in query_params:
             st.code(access_token)
             st.markdown("""
             **👇 NEXT ACTION 👇**
-            1. Copy this new token.
-            2. Update the `KITE_ACCESS_TOKEN` value in your Streamlit Secrets or .env file.
-            3. **Remove the `?request_token=...` from the URL in your browser to go back to the main app.**
+            1. **Copy this new token.**
+            2. **Update the `KITE_ACCESS_TOKEN` value in your Streamlit Secrets or .env file.**
             """)
+            st.warning("IMPORTANT: You must update your secrets or .env file before returning to the app.", icon="⚠️")
+            
+            # --- NEW: Redirect Button ---
+            st.link_button("✅ Go Back to Main App", "/", use_container_width=True, type="primary")
+
     except Exception as e:
         st.error(f"❌ An error occurred during session generation: {e}")
         st.info("Please ensure your API Key and Secret are correct in your app's configuration.")
