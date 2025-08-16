@@ -8,39 +8,37 @@ from kiteconnect import KiteConnect
 # --- Load environment variables for local development ---
 load_dotenv()
 
+# --- NEW: Custom Exception for Token Errors ---
+class TokenException(Exception):
+    pass
 
 def get_kite_client():
     """
-    Initialize KiteConnect for both Streamlit Cloud and local dev.
+    Initialize KiteConnect.
+    MODIFIED: Raises TokenException on authentication failure instead of stopping the app.
     """
     is_deployed = os.getenv("STREAMLIT_SERVER_RUNNING_ON_CLOUD") == "true"
     if is_deployed:
-        print("Authentication: Using Streamlit Secrets (deployment mode).")
         api_key = st.secrets.get("KITE_API_KEY")
         api_secret = st.secrets.get("KITE_API_SECRET")
         access_token = st.secrets.get("KITE_ACCESS_TOKEN")
     else:
-        print("Authentication: Using local .env file (development mode).")
         api_key = os.getenv("KITE_API_KEY")
         api_secret = os.getenv("KITE_API_SECRET")
         access_token = os.getenv("KITE_ACCESS_TOKEN")
 
     if not all([api_key, api_secret, access_token]):
-        st.error(
-            "❌ API key/secret or Access Token is missing. Check your Streamlit Secrets (if deployed) or .env file (if local)."
-        )
-        st.stop()
+        # Raise the custom exception if credentials are not found
+        raise TokenException("API key/secret or Access Token is missing. Check your configuration.")
 
     kite = KiteConnect(api_key=api_key)
     try:
         kite.set_access_token(access_token)
-        kite.profile()  # sanity check
+        kite.profile()  # Sanity check to see if the token is valid
     except Exception:
-        st.error("🔐 Session expired or token is invalid.")
-        st.info(
-            "On deployment, update KITE_ACCESS_TOKEN in Secrets. Locally, update .env and restart the app."
-        )
-        st.stop()
+        # Raise the custom exception if the token is expired/invalid
+        raise TokenException("Session expired or token is invalid.")
+    
     return kite
 
 
