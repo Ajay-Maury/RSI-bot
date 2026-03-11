@@ -1,6 +1,16 @@
-# 📈 RSI + Multi-Indicator Algo Trading Dashboard
+# RSI + Multi-Indicator Trading Dashboard
 
-A comprehensive, Python-based swing trading bot that uses a combination of RSI, EMA, SMA, ADX, and MACD indicators. The tool features a powerful backtesting engine and an interactive Streamlit dashboard for real-time analysis and strategy tuning.
+Python/Streamlit app for exploring Indian equities with Zerodha Kite data, generating RSI-based signals, and running a simple historical backtest.
+
+## What the code currently does
+
+- Authenticates with Zerodha Kite using `KITE_API_KEY`, `KITE_API_SECRET`, and `KITE_ACCESS_TOKEN`
+- Lists NSE and BSE equity symbols in the dashboard
+- Pulls historical OHLCV data for daily and intraday intervals
+- Computes RSI, EMA, 200-day SMA, ADX, MACD, and MACD signal
+- Generates `BUY`, `SELL`, or `HOLD` from the latest candles
+- Runs a basic backtest over a selected date range
+- Includes optional helpers for Discord and email alerts
 
 ## 🚀 Live Demo
 
@@ -126,32 +136,37 @@ With your virtual environment active, install the required libraries from the `r
 pip install -r requirements.txt
 ```
 
-### 3\. Configure Environment Variables
+### 3. Configure environment variables
 
-  - Create a new file named `.env` in the root `rsi_bot` directory.
-  - Add your Kite Connect API key and secret to this file. It should look like this:
-    ```
-    KITE_API_KEY="your_api_key"
-    KITE_API_SECRET="your_api_secret"
-    ```
+Create `.env` in the repo root:
 
-### 4\. Generate Your Kite Access Token
+```env
+KITE_API_KEY="your_api_key"
+KITE_API_SECRET="your_api_secret"
+KITE_ACCESS_TOKEN="your_access_token"
+```
 
-  - Run the `generate_token.py` script from your terminal:
-    ```bash
-    python generate_token.py
-    ```
-  - The script will print a login URL. Copy this URL and paste it into your web browser.
-  - Log in with your Kite credentials. After a successful login, you will be redirected to a new URL.
-  - Copy the **full redirect URL** from your browser and paste it back into the terminal when prompted.
-  - The script will then generate and display your `KITE_ACCESS_TOKEN`. Copy this token and add it to your `.env` file:
-    ```
-    KITE_ACCESS_TOKEN="your_generated_access_token"
-    ```
+For Streamlit Cloud, set the same values in app secrets instead.
 
-### 5\. Run the Dashboard
+## Generating an access token
 
-Once your `.env` file is fully configured, start the Streamlit application with this command:
+You have two supported flows.
+
+### Option 1: Script
+
+Run:
+
+```bash
+python generate_token.py
+```
+
+It prints a Kite login URL, asks for the full redirect URL after login, extracts `request_token`, and prints the new access token.
+
+### Option 2: In-app flow
+
+If the configured token is missing or expired, [streamlit_app.py](/Users/ajay/personal/rsi_bot/streamlit_app.py) shows a sidebar login button. After authorizing Kite, the app can read the `request_token` from the redirect query string and display the new access token directly in the UI.
+
+## Running the app
 
 ```bash
 streamlit run streamlit_app.py
@@ -160,6 +175,14 @@ streamlit run streamlit_app.py
 Your web browser should automatically open with the dashboard running.
 
 ## 📊 How to Use the Dashboard: A Visual Guide
+
+The dashboard currently supports these chart intervals:
+
+- `Daily`
+- `60 Minute`
+- `15 Minute`
+- `5 Minute`
+- `Minute`
 
 Here’s a step-by-step walkthrough of how to use the interactive dashboard.
 
@@ -189,4 +212,4 @@ The results of the backtest will be displayed in a table listing every simulated
 
 ## ⚠️ Disclaimer
 
-This project is intended for educational and informational purposes only. Algorithmic trading involves significant financial risk. All trades and investments are your own responsibility. Use this software at your own risk.
+This project is for education and experimentation. It is not investment advice, and live trading based on this code is your responsibility.
